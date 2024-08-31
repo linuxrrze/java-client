@@ -62,32 +62,36 @@ public class AsyncRequestCallable implements Callable<String>, Callback
         // If an auth token is required for the request, get that first then do the actual request
         if (this.authTokenRequired)
         {
-            if (!privacyIDEA.serviceAccountAvailable())
-            {
-                privacyIDEA.error("Service account is required to retrieve auth token!");
+            String authToken;
+            if (privacyIDEA.apiKeyAvailable()) {
+                authToken = privacyIDEA.getAuthToken();
+                headers.put(PIConstants.HEADER_AUTHORIZATION, authToken);
+	    } else if (privacyIDEA.serviceAccountAvailable()) {
+                latch = new CountDownLatch(1);
+                String tmpPath = path;
+                path = ENDPOINT_AUTH;
+                endpoint.sendRequestAsync(ENDPOINT_AUTH, privacyIDEA.serviceAccountParam(), Collections.emptyMap(), PIConstants.POST, this);
+                if (!latch.await(30, TimeUnit.SECONDS))
+                {
+                    privacyIDEA.error("Latch timed out...");
+                    return "";
+                }
+                // Extract the auth token from the response
+                String response = callbackResult[0];
+                authToken = privacyIDEA.parser.extractAuthToken(response);
+                if (authToken == null)
+                {
+                    // The parser already logs the error.
+                    return null;
+                }
+                // Add the auth token to the header
+                headers.put(PIConstants.HEADER_AUTHORIZATION, authToken);
+                path = tmpPath;
+                callbackResult[0] = null;
+	    } else {
+                privacyIDEA.error("Service account or API key is required to retrieve auth token!");
                 return null;
             }
-            latch = new CountDownLatch(1);
-            String tmpPath = path;
-            path = ENDPOINT_AUTH;
-            endpoint.sendRequestAsync(ENDPOINT_AUTH, privacyIDEA.serviceAccountParam(), Collections.emptyMap(), PIConstants.POST, this);
-            if (!latch.await(30, TimeUnit.SECONDS))
-            {
-                privacyIDEA.error("Latch timed out...");
-                return "";
-            }
-            // Extract the auth token from the response
-            String response = callbackResult[0];
-            String authToken = privacyIDEA.parser.extractAuthToken(response);
-            if (authToken == null)
-            {
-                // The parser already logs the error.
-                return null;
-            }
-            // Add the auth token to the header
-            headers.put(PIConstants.HEADER_AUTHORIZATION, authToken);
-            path = tmpPath;
-            callbackResult[0] = null;
         }
 
         // Do the actual request

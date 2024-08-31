@@ -21,6 +21,7 @@ class PIConfig
     String serverURL;
     String realm = "";
     boolean doSSLVerify = true;
+    String apiKey = "";
     String serviceAccountName = "";
     String serviceAccountPass = "";
     String serviceAccountRealm = "";

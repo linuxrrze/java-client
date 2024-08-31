@@ -273,9 +273,9 @@ public class PrivacyIDEA implements Closeable
     {
         Objects.requireNonNull(username, "Username is required!");
 
-        if (!serviceAccountAvailable())
+        if (!apiKeyAvailable() && !serviceAccountAvailable())
         {
-            log("No service account configured. Cannot trigger challenges");
+            log("No service account (or API key) configured. Cannot trigger challenges");
             return null;
         }
         Map<String, String> params = new LinkedHashMap<>();
@@ -309,20 +309,32 @@ public class PrivacyIDEA implements Closeable
      */
     public String getAuthToken()
     {
-        if (!serviceAccountAvailable())
+        if (apiKeyAvailable())
         {
-            error("Cannot retrieve auth token without service account!");
-            return null;
+            return(configuration.apiKey);
         }
-        String response = runRequestAsync(ENDPOINT_AUTH, serviceAccountParam(), Collections.emptyMap(), false, POST);
-        return parser.extractAuthToken(response);
+	else if (serviceAccountAvailable())
+        {
+            String response = runRequestAsync(ENDPOINT_AUTH, serviceAccountParam(), Collections.emptyMap(), false, POST);
+            return parser.extractAuthToken(response);
+	}
+        error("Cannot retrieve auth token without service account (or API key)!");
+        return null;
     }
 
     Map<String, String> serviceAccountParam()
     {
         Map<String, String> authTokenParams = new LinkedHashMap<>();
-        authTokenParams.put(USERNAME, configuration.serviceAccountName);
-        authTokenParams.put(PASSWORD, configuration.serviceAccountPass);
+
+        if (apiKeyAvailable())
+        {
+            authTokenParams.put(USERNAME, configuration.apiKey);
+        }
+        else
+        {
+            authTokenParams.put(USERNAME, configuration.serviceAccountName);
+            authTokenParams.put(PASSWORD, configuration.serviceAccountPass);
+        }
 
         if (configuration.serviceAccountRealm != null && !configuration.serviceAccountRealm.isEmpty())
         {
@@ -344,9 +356,9 @@ public class PrivacyIDEA implements Closeable
     public List<TokenInfo> getTokenInfo(String username)
     {
         Objects.requireNonNull(username);
-        if (!serviceAccountAvailable())
+        if (!apiKeyAvailable() && !serviceAccountAvailable())
         {
-            error("Cannot retrieve token info without service account!");
+            error("Cannot retrieve token info without service account (or API key)!");
             return null;
         }
 
@@ -364,9 +376,9 @@ public class PrivacyIDEA implements Closeable
      */
     public RolloutInfo tokenRollout(String username, String typeToEnroll)
     {
-        if (!serviceAccountAvailable())
+        if (!apiKeyAvailable() && !serviceAccountAvailable())
         {
-            error("Cannot do rollout without service account!");
+            error("Cannot do rollout without service account (or API key)!");
             return null;
         }
 
@@ -463,6 +475,12 @@ public class PrivacyIDEA implements Closeable
         return configuration.serviceAccountName != null && !configuration.serviceAccountName.isEmpty() && configuration.serviceAccountPass != null &&
                !configuration.serviceAccountPass.isEmpty();
     }
+
+    public boolean apiKeyAvailable()
+    {
+        return configuration.apiKey != null && !configuration.apiKey.isEmpty();
+    }
+
 
     PIConfig configuration()
     {
@@ -589,6 +607,7 @@ public class PrivacyIDEA implements Closeable
         private final String userAgent;
         private String realm = "";
         private boolean doSSLVerify = true;
+        private String apiKey = "";
         private String serviceAccountName = "";
         private String serviceAccountPass = "";
         private String serviceAccountRealm = "";
@@ -659,6 +678,18 @@ public class PrivacyIDEA implements Closeable
         }
 
         /**
+         * Set an API key , which can be used to trigger challenges etc.
+         *
+         * @param apiKey API key
+         * @return Builder
+         */
+        public Builder apiKey(String apiKey)
+        {
+            this.apiKey = apiKey;
+            return this;
+        }
+
+        /**
          * Set a service account, which can be used to trigger challenges etc.
          *
          * @param serviceAccountName account name
@@ -711,6 +742,7 @@ public class PrivacyIDEA implements Closeable
             PIConfig configuration = new PIConfig(serverURL, userAgent);
             configuration.realm = realm;
             configuration.doSSLVerify = doSSLVerify;
+            configuration.apiKey = apiKey;
             configuration.serviceAccountName = serviceAccountName;
             configuration.serviceAccountPass = serviceAccountPass;
             configuration.serviceAccountRealm = serviceAccountRealm;
